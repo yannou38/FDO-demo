@@ -20,6 +20,7 @@ see also https://fidoalliance.org/specs/FDO/
 
 
 Note: In this Demo we used a PXE Server to automatically install a minimal OS with the FDO Agent on a newly created VM that would act as a device.
+While not directly part of FDO, it's a supplementary step to show we can go from a bare-metal device using software. But in a production setting, the minimal OS with the FDO Agent would probably be flashed directly on the chip during production, as it would be way faster and cheaper than plugging the device on a network in the factory and spend time doing the PXE step.
 
 ## Prerequisites
 
@@ -37,6 +38,8 @@ Download or clone this on the host where the VMs need to be deployed.
 
 Edit Install/playbook/host/hosts-machines.yml and set the correct informations for your host
 Optionnaly, edit Install/uosbuilder/dockerfiles/uos/bash/bootstrap line 27 and set the password, username and IP of the central host (this is to gather logs of the device)
+Note: search for xx.xx.xx.xx, user and password for values you might want to replace. 
+If you edit the password, change the encrypted value in cloud-init with "openssl passwd -1 PASSWORD".
 
 Run the following command. This will take a while.
 
