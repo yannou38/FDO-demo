@@ -38,6 +38,8 @@ Download or clone this on the host where the VMs need to be deployed.
 
 Edit Install/playbook/host/hosts-machines.yml and set the correct informations for your host
 Optionnaly, edit Install/uosbuilder/dockerfiles/uos/bash/bootstrap line 27 and set the password, username and IP of the central host (this is to gather logs of the device)
+Note: search for xx.xx.xx.xx, user and password for values you might want to replace. 
+If you edit the password, change the encrypted value in cloud-init with "openssl passwd -1 PASSWORD".
 
 Run the following command. This will take a while.
 
