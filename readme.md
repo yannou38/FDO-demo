@@ -20,6 +20,7 @@ see also https://fidoalliance.org/specs/FDO/
 
 
 Note: In this Demo we used a PXE Server to automatically install a minimal OS with the FDO Agent on a newly created VM that would act as a device.
+While not directly part of FDO, it's a supplementary step to show we can go from a bare-metal device using software. But in a production setting, the minimal OS with the FDO Agent would probably be flashed directly on the chip during production, as it would be way faster and cheaper than plugging the device on a network in the factory and spend time doing the PXE step.
 
 ## Prerequisites
 
