@@ -1,0 +1,27 @@
+---
+- name: Ensure that necessary variables are defined ({{ vm_name }})
+  assert:
+    that:
+      - vm_name != ''
+      - vm_disk_size != ''
+      - vm_memory != ''
+      - vm_cpus != ''
+      - network_name != ''
+      - mac_addr != ''
+    fail_msg: > 
+      The following variables need to be defined:
+        - vm_name: name of the VM
+        - vm_disk_size: disk size of the VM, needs to respect the 'qemu-img create' syntax. Defaults in bytes, possible units: K, M, G, T ( example: 5G, 256M)
+        - vm_memory: memory allocated to the VM, needs to respect the 'virt-install' syntax (in MB, example: 256, 1024)
+        - vm_cpus: number of CPUs allocated to the VM
+        - network_name: network the VM will be allocated to
+
+- name: Debug input parameters
+  debug:
+    msg:
+      - "vm_name: {{ vm_name }}"
+      - "vm_disk_size: {{ vm_disk_size }}"
+      - "vm_memory: {{ vm_memory }}"
+      - "vm_cpus: {{ vm_cpus }}"
+      - "network_name: {{ network_name }}"
+      - "mac_addr: {{ mac_addr }}"

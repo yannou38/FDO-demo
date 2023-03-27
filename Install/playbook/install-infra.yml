@@ -1,0 +1,51 @@
+---
+- name: Install infrastructure base
+  hosts: target_server
+  roles:
+    - infra-base
+
+- name: Create VMs
+  hosts: target_server
+  gather_facts: no
+  tasks:
+    - name: Create VM '{{vm_name}}'
+      include_role: 
+        name: infra-qemu-vm
+      vars:
+        vm_name: "{{item.vm_name}}"
+        vm_memory: "{{item.vm_memory}}"
+        vm_disk_size: "{{item.vm_disk_size}}"
+        vm_cpus: "{{item.vm_cpus}}"
+        network_name: "{{item.network_name}}"
+        mac_addr: "{{item.mac_addr}}"
+      loop:
+        - vm_name: demo_pxe_vm
+          vm_memory: 2048
+          vm_disk_size: 20G
+          vm_cpus: 2
+          network_name: factory
+          mac_addr: "52:54:00:00:00:01"
+        - vm_name: demo_manufacturer_vm
+          vm_memory: 2048
+          vm_disk_size: 5G
+          vm_cpus: 2
+          network_name: factory
+          mac_addr: "52:54:00:00:00:02"
+        - vm_name: demo_factory_owner_vm
+          vm_memory: 2048
+          vm_disk_size: 5G
+          vm_cpus: 2
+          network_name: factory
+          mac_addr: "52:54:00:00:00:03"
+        - vm_name: demo_client_owner_vm
+          vm_memory: 2048
+          vm_disk_size: 5G
+          vm_cpus: 2
+          network_name: client
+          mac_addr: "52:54:00:00:00:04"
+        - vm_name: demo_rendezvous_vm
+          vm_memory: 2048
+          vm_disk_size: 5G
+          vm_cpus: 2
+          network_name: client
+          mac_addr: "52:54:00:00:00:05"

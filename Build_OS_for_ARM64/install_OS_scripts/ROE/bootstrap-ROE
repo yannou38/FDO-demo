@@ -1,0 +1,219 @@
+#!/bin/bash
+
+# Copyright (C) 2019 Intel Corporation
+# SPDX-License-Identifier: BSD-3-Clause
+
+set -a
+
+#this is provided while using Utility OS
+source /opt/bootstrap/functions
+
+
+PROVISION_LOG="/dev/ttyAMA0" # "/dev/ttyS0" #"/dev/console"
+run "Begin provisioning process..." \
+    "while (! docker ps > /dev/null ); do sleep 0.5; done" \
+    ${PROVISION_LOG}
+
+PROVISIONER=$1
+
+# --- Get kernel parameters ---
+kernel_params=$(cat /proc/cmdline)
+
+# --- Get free memory
+export freemem=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+
+
+
+
+if [[ $kernel_params == *"parttype="* ]]; then
+        tmp="${kernel_params##*parttype=}"
+        export param_parttype="${tmp%% *}"
+elif [ -d /sys/firmware/efi ]; then
+        export param_parttype="efi"
+else
+        export param_parttype="msdos"
+fi
+
+export param_parttype="efi"
+
+
+
+# --- Detect HDD ---
+if [ -d /sys/block/nvme[0-9]n[0-9] ]; then
+        export DRIVE=$(echo /dev/$(ls -l /sys/block/nvme* | grep -v usb | head -n1 | sed 's/^.*\(nvme[a-z0-1]\+\).*$/\1/'))
+        if [[ $param_parttype == 'efi' ]]; then
+                export EFI_PARTITION=${DRIVE}p1
+                export BOOT_PARTITION=${DRIVE}p2
+                export SWAP_PARTITION=${DRIVE}p3
+                export ROOT_PARTITION=${DRIVE}p4
+        else
+                export BOOT_PARTITION=${DRIVE}p1
+                export SWAP_PARTITION=${DRIVE}p2
+                export ROOT_PARTITION=${DRIVE}p3
+        fi
+elif [ -d /sys/block/[vsh]da ]; then
+        export DRIVE=$(echo /dev/$(ls -l /sys/block/[vsh]da | grep -v usb | head -n1 | sed 's/^.*\([vsh]d[a-z]\+\).*$/\1/'))
+        if [[ $param_parttype == 'efi' ]]; then
+                export EFI_PARTITION=${DRIVE}1
+                export BOOT_PARTITION=${DRIVE}2
+                export SWAP_PARTITION=${DRIVE}3
+                export ROOT_PARTITION=${DRIVE}4
+        else
+                export BOOT_PARTITION=${DRIVE}1
+                export SWAP_PARTITION=${DRIVE}2
+                export ROOT_PARTITION=${DRIVE}3
+        fi
+elif [ -d /sys/block/mmcblk[0-9] ]; then
+        export DRIVE=$(echo /dev/$(ls -l /sys/block/mmcblk[0-9] | grep -v usb | head -n1 | sed 's/^.*\(mmcblk[0-9]\+\).*$/\1/'))
+        if [[ $param_parttype == 'efi' ]]; then
+                export EFI_PARTITION=${DRIVE}p1
+                export BOOT_PARTITION=${DRIVE}p2
+                export SWAP_PARTITION=${DRIVE}p3
+                export ROOT_PARTITION=${DRIVE}p4
+        else
+                export BOOT_PARTITION=${DRIVE}p1
+                export SWAP_PARTITION=${DRIVE}p2
+                export ROOT_PARTITION=${DRIVE}p3
+        fi
+else
+        echo "No supported drives found!" 2>&1 | tee -a /dev/console
+        sleep 300
+        reboot
+fi
+
+export BOOTFS=/target/boot
+export ROOTFS=/target/root
+mkdir -p $BOOTFS
+mkdir -p $ROOTFS
+
+echo "" 2>&1 | tee -a /dev/console
+echo "" 2>&1 | tee -a /dev/console
+echo "Installing on ${DRIVE}" 2>&1 | tee -a /dev/tty0
+echo "" 2>&1 | tee -a /dev/console
+echo "" 2>&1 | tee -a /dev/console
+
+# --- Partition HDD ---
+run "Partitioning drive ${DRIVE}" \
+    "if [[ $param_parttype == 'efi' ]]; then
+        parted --script ${DRIVE} \
+        mklabel gpt \
+        mkpart ESP fat32 1MiB 1024MiB \
+        set 1 esp on \
+        mkpart primary ext4 1024MiB 2048MiB \
+        mkpart primary linux-swap 2048MiB 3072MiB \
+        mkpart primary 3072MiB 100%;
+    else
+        parted --script ${DRIVE} \
+        mklabel msdos \
+        mkpart primary ext4 1MiB 1024MiB \
+        set 1 boot on \
+        mkpart primary linux-swap 1024MiB 2048MiB \
+        mkpart primary 2048MiB 100%;
+    fi" \
+    ${PROVISION_LOG}
+
+# --- Create file systems ---
+run "Creating boot partition on drive ${DRIVE}" \
+    "mkfs -t ext4 -L BOOT -F ${BOOT_PARTITION} && \
+    e2label ${BOOT_PARTITION} BOOT && \
+    mkdir -p $BOOTFS && \
+    mount ${BOOT_PARTITION} $BOOTFS" \
+    ${PROVISION_LOG}
+
+if [[ $param_parttype == 'efi' ]]; then
+    export EFIFS=$BOOTFS/efi
+    mkdir -p $EFIFS
+    run "Creating efi boot partition on drive ${DRIVE}" \
+        "mkfs -t vfat -n BOOT  ${EFI_PARTITION} && \
+        mkdir -p $EFIFS && \
+        mount -t vfat ${EFI_PARTITION} $EFIFS" \
+        ${PROVISION_LOG}
+fi
+
+# --- Create ROOT file system ---
+run "Creating root file system" \
+    "mkfs -t ext4 ${ROOT_PARTITION} && \
+    mount ${ROOT_PARTITION} $ROOTFS && \
+    e2label ${ROOT_PARTITION} STATE_PARTITION" \
+    ${PROVISION_LOG}
+
+#run "Creating swap file system" \
+#    "mkswap ${SWAP_PARTITION}" \
+#    ${PROVISION_LOG}
+
+
+
+
+
+# -- Configure Image database ---
+run "Configuring Image Database" \
+    "mkdir -p $ROOTFS/tmp/docker && \
+    chmod 777 $ROOTFS/tmp && \
+    killall dockerd && sleep 2 && \
+    /usr/local/bin/dockerd ${REGISTRY_MIRROR} --data-root=$ROOTFS/tmp/docker > /dev/null 2>&1 &" \
+    ${PROVISION_LOG}
+
+
+sleep 5
+
+while (! docker ps > /dev/null ); do sleep 0.5; done
+
+
+run "Begin Device Initialization..." \
+    "sleep 0.5" \
+    ${PROVISION_LOG}
+
+
+
+if [[ $param_parttype == 'efi' ]]; then
+run "Making ${DRIVE} bootable for FDO-TO on EFI" \
+    "mkdir  -p $EFIFS/EFI/BOOT && cd $EFIFS/EFI/BOOT && \
+    wget --no-check-certificate -O grubaa64.efi http://10.0.2.2:8080/ROE-EFI/grubaa64.efi && sync && \
+    wget --no-check-certificate -O bootaa64.efi http://10.0.2.2:8080/ROE-EFI/bootaa64.efi && sync && \
+    wget --no-check-certificate -O mmaa64.efi http://10.0.2.2:8080/ROE-EFI/mmaa64.efi && sync && \
+    wget --no-check-certificate -O grub.cfg http://10.0.2.2:8080/ROE-EFI/grub.cfg && sync && \
+    wget --no-check-certificate -O vmlinuz http://10.0.2.2:8080/ROE-EFI/vmlinuz && sync && \
+    wget --no-check-certificate -O initrd http://10.0.2.2:8080/ROE-EFI/initrd && sync && \
+    wget --no-check-certificate -O fonts.tgz http://10.0.2.2:8080/ROE-EFI/fonts.tgz && tar xvfz fonts.tgz && sync && \
+    wget --no-check-certificate -O arm64-efi.tgz http://10.0.2.2:8080/ROE-EFI/arm64-efi.tgz  && tar xvfz arm64-efi.tgz && sync  " \
+    ${PROVISION_LOG}
+else
+run "Begin Make ${DRIVE} BIOS bootable..." \
+    "mkdir -p $BOOTFS && cd $BOOTFS && sleep 5  " \
+    ${PROVISION_LOG}
+fi
+
+if [[ $param_parttype == 'efi' ]]; then
+    efibootmgr 2>&1 | tee -a /dev/console
+    echo "" 2>&1 | tee -a /dev/console
+    echo "" 2>&1 | tee -a /dev/console
+
+   run "Setting Next Boot from Hard disk " "" ${PROVISION_LOG}
+   if [[ `efibootmgr | grep -i "uefi vbox harddisk | wc -l` ==  '1' ]]; then
+   efibootmgr -n  `efibootmgr | grep -i "uefi vbox harddisk" |  awk '{print substr ($0,8,1)}' ` 2&>1
+   efibootmgr -o  `efibootmgr | grep -i "uefi vbox harddisk" |  awk '{print substr ($0,8,1)}' ` 2&>1
+   fi
+   if [[ `efibootmgr | grep -i "uefi os" | wc -l` ==  '1' ]]; then
+   efibootmgr -n  `efibootmgr | grep -i "uefi os" |  awk '{print substr ($0,8,1)}' ` 2&>1
+   efibootmgr -o  `efibootmgr | grep -i "uefi os" |  awk '{print substr ($0,8,1)}' ` 2&>1
+   fi
+   efibootmgr 2>&1 | tee -a /dev/console
+else
+   run "Warning!! This is a Legacy BIOS system without EFI, You may to select the next Boot from Hard disk from BIOS or the PXE menu " "sleep 30" ${PROVISION_LOG}
+fi
+
+run "swapoff" "swapoff -a" ${PROVISION_LOG}
+
+if [[ $param_release == 'prod' ]]; then
+run "Install ROE completed...shutting down system  " \
+    "sleep 1 &&  \
+     poweroff " \
+    ${PROVISION_LOG}
+else
+run "Install ROE completed... rebooting " \
+    "sleep 1 &&  \
+     poweroff " \
+    ${PROVISION_LOG}
+fi
+
+

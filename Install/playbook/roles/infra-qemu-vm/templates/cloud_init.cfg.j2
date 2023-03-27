@@ -1,0 +1,12 @@
+#cloud-config
+users:
+  - default
+  - name: {{ vm_name }}
+    gecos: {{ vm_name }}
+    groups: sudo 
+    lock-passwd: false 
+    sudo: ALL=(ALL) ALL 
+    shell: /bin/bash 
+    passwd: $1$K5gj15Ss$5Z2AMsGFTU6CQIe0iMpLN0
+ssh_pwauth: true 
+hostname: {{ vm_name }}

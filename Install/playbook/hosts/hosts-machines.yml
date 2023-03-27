@@ -1,0 +1,12 @@
+---
+all:
+  hosts:
+    target_server:
+      ansible_user: USER
+      ansible_host: xx.xx.xx.xx
+      ansible_password: PASSWORD
+      ansible_become_password: PASSWORD
+      os_image_url: "https://cloud-images.ubuntu.com/releases/focal/release/ubuntu-20.04-server-cloudimg-amd64.img"
+      apt_arch: amd64
+      if_name: ens2
+      ansible_python_interpreter: "/usr/bin/python3"

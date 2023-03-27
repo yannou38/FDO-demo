@@ -1,0 +1,584 @@
+#!/bin/bash
+
+# Copyright (C) 2019 Intel Corporation
+# SPDX-License-Identifier: BSD-3-Clause
+
+set -a
+
+#this is provided while using Utility OS
+source /opt/bootstrap/functions
+
+param_raw_repository="http://10.0.2.2:8080/ubuntu"
+
+# --- Call pre.sh from base_profile ---
+
+
+
+# --- Ubuntu Packages ---
+ubuntu_packages="net-tools"
+ubuntu_tasksel="" # standard
+
+ntpd -d -N -q -n -p 0.debian.pool.ntp.org
+#0.fr.pool.ntp.org
+#us.pool.ntp.org
+
+PROVISION_LOG="/dev/console"
+run "Begin provisioning process..." \
+    "while (! docker ps > /dev/null ); do sleep 0.5; done" \
+    ${PROVISION_LOG}
+
+PROVISIONER=10.0.2.2
+
+
+
+# --- Get kernel parameters ---
+kernel_params=$(cat /proc/cmdline)
+
+if [[ $kernel_params == *"wifissid="* ]]; then
+	tmp="${kernel_params##*wifissid=}"
+	export param_wifissid="${tmp%% *}"
+elif [ ! -z "${SSID}" ]; then
+	export param_wifissid="${SSID}"
+fi
+
+if [[ $kernel_params == *"wifipsk="* ]]; then
+	tmp="${kernel_params##*wifipsk=}"
+	export param_wifipsk="${tmp%% *}"
+elif [ ! -z "${PSK}" ]; then
+	export param_wifipsk="${PSK}"
+fi
+
+if [[ $kernel_params == *"network="* ]]; then
+	tmp="${kernel_params##*network=}"
+	export param_network="${tmp%% *}"
+fi
+
+if [[ $kernel_params == *"httppath="* ]]; then
+	tmp="${kernel_params##*httppath=}"
+	export param_httppath="${tmp%% *}"
+fi
+
+if [[ $kernel_params == *"parttype="* ]]; then
+	tmp="${kernel_params##*parttype=}"
+	export param_parttype="${tmp%% *}"
+elif [ -d /sys/firmware/efi ]; then
+	export param_parttype="efi"
+else
+	export param_parttype="msdos"
+fi
+
+export param_parttype="efi"
+
+if [[ $kernel_params == *"bootstrap="* ]]; then
+	tmp="${kernel_params##*bootstrap=}"
+	export param_bootstrap="${tmp%% *}"
+	export param_bootstrapurl=$(echo $param_bootstrap | sed "s#/$(basename $param_bootstrap)\$##g")
+fi
+
+if [[ $kernel_params == *"basebranch="* ]]; then
+	tmp="${kernel_params##*basebranch=}"
+	export param_basebranch="${tmp%% *}"
+fi
+
+if [[ $kernel_params == *"token="* ]]; then
+	tmp="${kernel_params##*token=}"
+	export param_token="${tmp%% *}"
+fi
+
+if [[ $kernel_params == *"agent="* ]]; then
+	tmp="${kernel_params##*agent=}"
+	export param_agent="${tmp%% *}"
+else
+	export param_agent="master"
+fi
+
+if [[ $kernel_params == *"kernparam="* ]]; then
+	tmp="${kernel_params##*kernparam=}"
+	temp_param_kernparam="${tmp%% *}"
+	export param_kernparam=$(echo ${temp_param_kernparam} | sed 's/#/ /g' | sed 's/:/=/g')
+fi
+
+if [[ $kernel_params == *"ubuntuversion="* ]]; then
+	tmp="${kernel_params##*ubuntuversion=}"
+	export param_ubuntuversion="${tmp%% *}"
+else
+	export param_ubuntuversion="cosmic"
+fi
+
+# The following is bandaid for Disco Dingo
+if [ $param_ubuntuversion = "disco" ]; then
+	export DOCKER_UBUNTU_RELEASE="cosmic"
+else
+	export DOCKER_UBUNTU_RELEASE=$param_ubuntuversion
+fi
+export DOCKER_UBUNTU_RELEASE="bionic"
+export param_ubuntuversion="bionic"
+
+if [[ $kernel_params == *"arch="* ]]; then
+	tmp="${kernel_params##*arch=}"
+	export param_arch="${tmp%% *}"
+else
+	export param_arch="amd64"
+fi
+
+export param_arch="arm64"
+
+if [[ $kernel_params == *"kernelversion="* ]]; then
+	tmp="${kernel_params##*kernelversion=}"
+	export param_kernelversion="${tmp%% *}"
+else
+	export param_kernelversion="linux-image-4.15.0-60-generic" 
+	#generic"
+fi
+
+if [[ $kernel_params == *"insecurereg="* ]]; then
+	tmp="${kernel_params##*insecurereg=}"
+	export param_insecurereg="${tmp%% *}"
+fi
+
+if [[ $kernel_params == *"username="* ]]; then
+	tmp="${kernel_params##*username=}"
+	export param_username="${tmp%% *}"
+else
+	export param_username="sys-admin"
+fi
+
+if [[ $kernel_params == *"epassword="* ]]; then
+	tmp="${kernel_params##*epassword=}"
+	temp_param_epassword="${tmp%% *}"
+	export param_epassword=$(echo ${temp_param_epassword} | sed 's/\$/\\\\\\$/g')
+elif [[ $kernel_params == *"password="* ]]; then
+	tmp="${kernel_params##*password=}"
+	export param_password="${tmp%% *}"
+else
+	export param_password="password"
+fi
+
+if [[ $kernel_params == *"debug="* ]]; then
+	tmp="${kernel_params##*debug=}"
+	export param_debug="${tmp%% *}"
+	export debug="${tmp%% *}"
+fi
+
+if [[ $kernel_params == *"resume="* ]]; then
+	tmp="${kernel_params##*resume=}"
+	export param_resume="${tmp%% *}"
+
+    if [ ${param_resume,,} == "true" ]; then
+        echo "export RESUME_PROFILE=1" > .bash_env
+        echo "export RESUME_PROFILE_RUN=("Configuring Image Database")" >> .bash_env
+        export BASH_ENV=.bash_env
+        . .bash_env
+    fi
+fi
+
+if [[ $kernel_params == *"release="* ]]; then
+	tmp="${kernel_params##*release=}"
+	export param_release="${tmp%% *}"
+else
+	export param_release='dev'
+fi
+
+if [[ $kernel_params == *"docker_login_user="* ]]; then
+	tmp="${kernel_params##*docker_login_user=}"
+	export param_docker_login_user="${tmp%% *}"
+fi
+
+if [[ $kernel_params == *"docker_login_pass="* ]]; then
+	tmp="${kernel_params##*docker_login_pass=}"
+	export param_docker_login_pass="${tmp%% *}"
+fi
+
+if [[ $param_release == 'prod' ]]; then
+	export kernel_params="$param_kernparam" # ipv6.disable=1
+else
+	export kernel_params="$param_kernparam"
+fi
+
+
+
+
+
+# --- Get free memory
+export freemem=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+
+# --- Detect HDD ---
+if [ -d /sys/block/nvme[0-9]n[0-9] ]; then
+	export DRIVE=$(echo /dev/`ls -l /sys/block/nvme* | grep -v usb | head -n1 | sed 's/^.*\(nvme[a-z0-1]\+\).*$/\1/'`);
+	export BOOT_PARTITION=${DRIVE}p1
+	export SWAP_PARTITION=${DRIVE}p2
+	export ROOT_PARTITION=${DRIVE}p3
+elif [ -d /sys/block/[vsh]da ]; then
+	export DRIVE=$(echo /dev/`ls -l /sys/block/[vsh]da | grep -v usb | head -n1 | sed 's/^.*\([vsh]d[a-z]\+\).*$/\1/'`);
+	export BOOT_PARTITION=${DRIVE}1
+	export SWAP_PARTITION=${DRIVE}2
+	export ROOT_PARTITION=${DRIVE}3
+elif [ -d /sys/block/mmcblk[0-9] ]; then
+	export DRIVE=$(echo /dev/`ls -l /sys/block/mmcblk[0-9] | grep -v usb | head -n1 | sed 's/^.*\(mmcblk[0-9]\+\).*$/\1/'`);
+	export BOOT_PARTITION=${DRIVE}p1
+	export SWAP_PARTITION=${DRIVE}p2
+	export ROOT_PARTITION=${DRIVE}p3
+else
+	echo "No supported drives found!" 2>&1 | tee -a /dev/console
+	sleep 300
+	reboot
+fi
+
+export BOOTFS=/target/boot
+export ROOTFS=/target/root
+mkdir -p $BOOTFS
+mkdir -p $ROOTFS
+
+echo "" 2>&1 | tee -a /dev/console
+echo "" 2>&1 | tee -a /dev/console
+echo "Installing on ${DRIVE}" 2>&1 | tee -a /dev/console
+echo "" 2>&1 | tee -a /dev/console
+echo "" 2>&1 | tee -a /dev/console
+
+# --- Partition HDD ---
+run "Partitioning drive ${DRIVE}" \
+    "if [[ $param_parttype == 'efi' ]]; then
+        parted --script ${DRIVE} \
+        mklabel gpt \
+        mkpart ESP fat32 1MiB 1024MiB \
+        set 1 esp on \
+        mkpart primary linux-swap 1024MiB 2048MiB \
+        mkpart primary 2048MiB 100%;
+    else
+        parted --script ${DRIVE} \
+        mklabel msdos \
+        mkpart primary ext4 1MiB 551MiB \
+        set 1 boot on \
+        mkpart primary linux-swap 551MiB 1575MiB \
+        mkpart primary 1575MiB 100%;
+    fi" \
+    ${PROVISION_LOG}
+
+# --- Create file systems ---
+if [[ $param_parttype == 'efi' ]]; then
+    run "Creating boot partition on drive ${DRIVE}" \
+        "mkfs -t vfat -n BOOT ${BOOT_PARTITION} && \
+        mkdir -p $BOOTFS && \
+        mount ${BOOT_PARTITION} $BOOTFS" \
+        ${PROVISION_LOG}
+else
+    run "Creating boot partition on drive ${DRIVE}" \
+        "mkfs -t ext4 -L BOOT -F ${BOOT_PARTITION} && \
+        e2label ${BOOT_PARTITION} BOOT && \
+        mkdir -p $BOOTFS && \
+        mount ${BOOT_PARTITION} $BOOTFS" \
+        ${PROVISION_LOG}
+fi
+
+# --- Create ROOT file system ---
+run "Creating root file system" \
+    "mkfs -t ext4 ${ROOT_PARTITION} && \
+    mount ${ROOT_PARTITION} $ROOTFS && \
+    e2label ${ROOT_PARTITION} STATE_PARTITION" \
+    ${PROVISION_LOG}
+
+run "Creating swap file system" \
+    "mkswap ${SWAP_PARTITION}" \
+    ${PROVISION_LOG}
+
+# --- check if we need to add memory ---
+if [ $freemem -lt 6291456 ]; then
+    fallocate -l 2G $ROOTFS/swap
+    chmod 600 $ROOTFS/swap
+    mkswap $ROOTFS/swap
+    swapon $ROOTFS/swap
+fi
+
+# --- check if we need to move tmp folder ---
+if [ $freemem -lt 6291456 ]; then
+    mkdir -p $ROOTFS/tmp
+    export TMP=$ROOTFS/tmp
+else
+    export TMP=/tmp
+fi
+
+
+
+export PROVISION_LOG="/dev/console"
+
+
+# -- Configure Image database ---
+run "Configuring Image Database" \
+    "mkdir -p $ROOTFS/tmp/docker && \
+    chmod 777 $ROOTFS/tmp && \
+    killall dockerd && sleep 2 && \
+    /usr/local/bin/dockerd --insecure-registry https://registry-1.docker.io  --data-root=$ROOTFS/tmp/docker > /dev/null 2>&1 &" \
+    "/dev/console"
+
+while (! docker ps > /dev/null ); do sleep 0.5; done; sleep 3
+
+
+# --- Begin Ubuntu Install Process ---
+run "Preparing Ubuntu ${param_ubuntuversion} installer" \
+    "docker pull ubuntu:${param_ubuntuversion}" \
+    "/dev/console"
+
+
+rootfs_partuuid=$(lsblk -no UUID ${ROOT_PARTITION})
+bootfs_partuuid=$(lsblk -no UUID ${BOOT_PARTITION})
+swapfs_partuuid=$(lsblk -no UUID ${SWAP_PARTITION})
+
+if [[ $param_parttype == 'efi' ]]; then
+    run "Installing Ubuntu ${param_ubuntuversion} (~10 min)" \
+        "docker run -i --rm --privileged --name ubuntu-installer ${DOCKER_PROXY_ENV} -v $ROOTFS:/target/root ubuntu:${param_ubuntuversion} sh -c \
+        'if [ \"${PKG_REPO_LIST}\" != \"\" ]; then echo \"deb ${param_mirror} ${param_ubuntuversion} ${PKG_REPO_LIST}\" > /etc/apt/sources.list; fi && \
+        if [ \"${PKG_REPO_SEC_LIST}\" != \"\" ]; then echo \"deb ${param_mirror} ${param_ubuntuversion}-security ${PKG_REPO_SEC_LIST}\" >> /etc/apt/sources.list; fi && \
+        apt update && \
+        apt install -y debootstrap && \
+        debootstrap --arch arm64  ${param_ubuntuversion} /target/root ${param_mirror} && \
+        if [ -z ${param_mirror} ]; then cp /etc/apt/sources.list /target/root/etc/apt/sources.list; fi && \
+        if [ \"${PKG_REPO_LIST}\" != \"\" ]; then echo \"deb ${param_mirror} ${param_ubuntuversion} ${PKG_REPO_LIST}\" > /target/root/etc/apt/sources.list; fi && \
+        if [ \"${PKG_REPO_SEC_LIST}\" != \"\" ]; then echo \"deb ${param_mirror} ${param_ubuntuversion}-security ${PKG_REPO_SEC_LIST}\" >> /target/root/etc/apt/sources.list; fi && \
+        mount --bind dev /target/root/dev && \
+        mount -t proc proc /target/root/proc && \
+        mount -t sysfs sysfs /target/root/sys && \
+        LANG=C.UTF-8 chroot /target/root sh -c \
+            \"$(echo ${INLINE_PROXY} | sed "s#'#\\\\\"#g") export TERM=xterm-color && \
+            export DEBIAN_FRONTEND=noninteractive && \
+            chmod a+rw /dev/null /dev/zero && \
+            mkdir -p /boot/efi && \
+            mount ${BOOT_PARTITION} /boot/efi && \
+            apt update && \
+            apt install -y wget ${param_kernelversion} && \
+            apt install -y grub-efi-arm64 shim && \
+            \\\$(grub-install ${BOOT_PARTITION}  --target=arm64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu --no-nvram; exit 0) && \
+            update-grub && \
+            adduser --quiet --disabled-password --shell /bin/bash --gecos \\\"\\\" ${param_username} && \
+            addgroup --system admin && \
+            if [ ! -z ${param_epassword} ]; then echo \\\"${param_username}:${param_epassword}\\\" | chpasswd -e; \
+            else echo \\\"${param_username}:${param_password}\\\" | chpasswd; fi && \
+            usermod -a -G admin ${param_username} && \
+            if [ \\\"${ubuntu_tasksel}\\\" != "" ]; then \
+                apt install -y tasksel && \
+                tasksel install ${ubuntu_tasksel}; \
+            fi && \
+            if [ \\\"${ubuntu_packages}\\\" != "" ]; then apt install -y ${ubuntu_packages}; fi && \
+            apt clean\"' && \
+        wget --header \"Authorization: token ${param_token}\" -O - ${param_raw_repository}/files/etc/fstab | sed -e \"s#ROOT#UUID=${rootfs_partuuid}#g\" | sed -e \"s#BOOT#UUID=${bootfs_partuuid}                 /boot/efi       vfat    umask=0077        0       1#g\" | sed -e \"s#SWAP#UUID=${swapfs_partuuid}#g\" > $ROOTFS/etc/fstab" \
+        "/dev/console"
+
+    EFI_BOOT_NAME="Ubuntu OS"
+    run "EFI Boot Manager" \
+        "efibootmgr -c -d ${DRIVE} -p 1 -L \"${EFI_BOOT_NAME}\" -l '\\EFI\\ubuntu\\grubaa64.efi'" \
+        "/dev/console"
+
+    export MOUNT_DURING_INSTALL="chmod a+rw /dev/null /dev/zero && mount ${BOOT_PARTITION} /boot/efi"
+else
+    run "Installing Ubuntu ${param_ubuntuversion} (~10 min)" \
+        "docker run -i --rm --privileged --name ubuntu-installer ${DOCKER_PROXY_ENV} -v $ROOTFS:/target/root ubuntu:${param_ubuntuversion} sh -c \
+        'if [ \"${PKG_REPO_LIST}\" != \"\" ]; then echo \"deb ${param_mirror} ${param_ubuntuversion} ${PKG_REPO_LIST}\" > /etc/apt/sources.list; fi && \
+        if [ \"${PKG_REPO_SEC_LIST}\" != \"\" ]; then echo \"deb ${param_mirror} ${param_ubuntuversion}-security ${PKG_REPO_SEC_LIST}\" >> /etc/apt/sources.list; fi && \
+        apt update && \
+        apt install -y debootstrap && \
+        debootstrap --arch ${param_arch} ${param_ubuntuversion} /target/root ${param_mirror} && \
+        if [ -z ${param_mirror} ]; then cp /etc/apt/sources.list /target/root/etc/apt/sources.list; fi && \
+        if [ \"${PKG_REPO_LIST}\" != \"\" ]; then echo \"deb ${param_mirror} ${param_ubuntuversion} ${PKG_REPO_LIST}\" > /target/root/etc/apt/sources.list; fi && \
+        if [ \"${PKG_REPO_SEC_LIST}\" != \"\" ]; then echo \"deb ${param_mirror} ${param_ubuntuversion}-security ${PKG_REPO_SEC_LIST}\" >> /target/root/etc/apt/sources.list; fi && \
+        mount --bind dev /target/root/dev && \
+        mount -t proc proc /target/root/proc && \
+        mount -t sysfs sysfs /target/root/sys && \
+        LANG=C.UTF-8 chroot /target/root sh -c \
+            \"$(echo ${INLINE_PROXY} | sed "s#'#\\\\\"#g") export TERM=xterm-color && \
+            export DEBIAN_FRONTEND=noninteractive && \
+            chmod a+rw /dev/null /dev/zero && \
+            mount ${BOOT_PARTITION} /boot && \
+            apt update && \
+            apt install -y wget ${param_kernelversion} && \
+            apt install -y grub-pc && \
+            grub-install ${DRIVE} && \
+            adduser --quiet --disabled-password --shell /bin/bash --gecos \\\"\\\" ${param_username} && \
+            addgroup --system admin && \
+            if [ ! -z ${param_epassword} ]; then echo \\\"${param_username}:${param_epassword}\\\" | chpasswd -e; \
+            else echo \\\"${param_username}:${param_password}\\\" | chpasswd; fi && \
+            usermod -a -G admin ${param_username} && \
+            if [ \\\"${ubuntu_tasksel}\\\" != "" ]; then \
+                apt install -y tasksel && \
+                tasksel install ${ubuntu_tasksel}; \
+            fi && \
+            if [ \\\"${ubuntu_packages}\\\" != "" ]; then apt install -y ${ubuntu_packages}; fi && \
+            apt clean\"' && \
+        wget --header \"Authorization: token ${param_token}\" -O - ${param_raw_repository}/files/etc/fstab | sed -e \"s#ROOT#UUID=${rootfs_partuuid}#g\" | sed -e \"s#BOOT#UUID=${bootfs_partuuid}                 /boot           ext4    defaults        0       2#g\" | sed -e \"s#SWAP#UUID=${swapfs_partuuid}#g\" > $ROOTFS/etc/fstab" \
+        "/dev/console"
+
+    export MOUNT_DURING_INSTALL="chmod a+rw /dev/null /dev/zero && mount ${BOOT_PARTITION} /boot"
+fi
+
+# --- Enabling Ubuntu boostrap items ---
+HOSTNAME="ubuntu-$(tr </dev/urandom -dc a-f0-9 | head -c10)"
+run "Enabling Ubuntu boostrap items" \
+    "wget --header \"Authorization: token ${param_token}\" -O $ROOTFS/etc/systemd/system/show-ip.service ${param_raw_repository}/files/etc/systemd/show-ip.service && \
+    mkdir -p $ROOTFS/etc/systemd/system/network-online.target.wants/ && \
+    ln -s /etc/systemd/system/show-ip.service $ROOTFS/etc/systemd/system/network-online.target.wants/show-ip.service; \
+    wget --header \"Authorization: token ${param_token}\" -O - ${param_raw_repository}/files/etc/hosts | sed -e \"s#@@HOSTNAME@@#${HOSTNAME}#g\" > $ROOTFS/etc/hosts && \
+    mkdir -p $ROOTFS/etc/systemd/network/ && \
+    wget --header \"Authorization: token ${param_token}\" -O - ${param_raw_repository}/files/etc/systemd/network/wired.network > $ROOTFS/etc/systemd/network/wired.network && \
+    echo \"${HOSTNAME}\" > $ROOTFS/etc/hostname && \
+    echo \"LANG=en_US.UTF-8\" >> $ROOTFS/etc/default/locale && \
+    docker run -i --rm --privileged --name ubuntu-installer ${DOCKER_PROXY_ENV} -v $ROOTFS:/target/root ubuntu:${param_ubuntuversion} sh -c \
+        'mount --bind dev /target/root/dev && \
+        mount -t proc proc /target/root/proc && \
+        mount -t sysfs sysfs /target/root/sys && \
+        LANG=C.UTF-8 chroot /target/root sh -c \
+        \"$(echo ${INLINE_PROXY} | sed "s#'#\\\\\"#g") export TERM=xterm-color && \
+        export DEBIAN_FRONTEND=noninteractive && \
+        ${MOUNT_DURING_INSTALL} && \
+        apt purge -y netplan.io && \
+        rm -rf /etc/netplan && \
+        systemctl enable systemd-networkd && \
+        update-grub && \
+        locale-gen --purge en_US.UTF-8 && \
+        dpkg-reconfigure --frontend=noninteractive locales\"'" \
+    "/dev/console"
+
+if [ "${param_network}" == "bridged" ]; then
+    run "Installing the bridged network" \
+        "mkdir -p $ROOTFS/etc/systemd/network/ && \
+        wget --header \"Authorization: token ${param_token}\" -O $ROOTFS/etc/systemd/network/wired.network ${param_raw_repository}/files/etc/systemd/network/bridged/wired.network && \
+        wget --header \"Authorization: token ${param_token}\" -O $ROOTFS/etc/systemd/network/bond0.netdev ${param_raw_repository}/files/etc/systemd/network/bridged/bond0.netdev && \
+        wget --header \"Authorization: token ${param_token}\" -O $ROOTFS/etc/systemd/network/bond0.network ${param_raw_repository}/files/etc/systemd/network/bridged/bond0.network && \
+        wget --header \"Authorization: token ${param_token}\" -O $ROOTFS/etc/systemd/network/br0.netdev ${param_raw_repository}/files/etc/systemd/network/bridged/br0.netdev && \
+        wget --header \"Authorization: token ${param_token}\" -O $ROOTFS/etc/systemd/network/br0.network ${param_raw_repository}/files/etc/systemd/network/bridged/br0.network" \
+        "/dev/console"
+
+else
+	    #if [ "${param_network}" == "network-manager" ]; then
+    run "Installing Network Manager Packages on Ubuntu ${param_ubuntuversion}" \
+        "docker run -i --rm --privileged --name ubuntu-installer ${DOCKER_PROXY_ENV} -v /dev:/dev -v /sys/:/sys/ -v $ROOTFS:/target/root ubuntu:${param_ubuntuversion} sh -c \
+        'mount --bind dev /target/root/dev && \
+        mount -t proc proc /target/root/proc && \
+        mount -t sysfs sysfs /target/root/sys && \
+        LANG=C.UTF-8 chroot /target/root sh -c \
+            \"$(echo ${INLINE_PROXY} | sed "s#'#\\\\\"#g") export TERM=xterm-color && \
+            export DEBIAN_FRONTEND=noninteractive && \
+            apt install -y network-manager\"'" \
+        ${PROVISION_LOG}
+fi
+
+
+
+
+if [ -d "/sys/class/ieee80211" ] && ( find /sys/class/net/wl* > /dev/null 2>&1 ); then
+    if [ -n "${param_wifissid}" ]; then
+        WIFI_NAME_ONBOARD=$(udevadm test-builtin net_id /sys/class/net/wl* 2> /dev/null | grep ID_NET_NAME_ONBOARD | awk -F'=' '{print $2}' | head -1)
+        WIFI_NAME_PATH=$(udevadm test-builtin net_id /sys/class/net/wl* 2> /dev/null | grep ID_NET_NAME_PATH | awk -F'=' '{print $2}' | head -1)
+        if [ ! -z ${WIFI_NAME_ONBOARD} ]; then
+            WIFI_NAME=${WIFI_NAME_ONBOARD}
+        else
+            WIFI_NAME=${WIFI_NAME_PATH}
+        fi
+        if [ "${param_network}" == "bridged" ]; then
+            run "Installing Wifi on Ubuntu ${param_ubuntuversion}" \
+                "wget --header \"Authorization: token ${param_token}\" -O $ROOTFS/etc/systemd/network/wireless.network ${param_raw_repository}/files/etc/systemd/network/bridged/wireless.network.template && \
+                sed -i -e \"s#@@WIFI_NAME@@#${WIFI_NAME}#g\" $ROOTFS/etc/systemd/network/wireless.network && \
+                sed -i -e \"s#@@WPA_SSID@@#${param_wifissid}#g\" $ROOTFS/etc/systemd/network/wireless.network && \
+                sed -i -e \"s#@@WPA_PSK@@#${param_wifipsk}#g\" $ROOTFS/etc/systemd/network/wireless.network" \
+                ${PROVISION_LOG}
+        elif [ "${param_network}" == "network-manager" ]; then
+            run "Installing Wifi on Ubuntu ${param_ubuntuversion}" \
+                "docker run -i --rm --privileged --name ubuntu-installer ${DOCKER_PROXY_ENV} -v /dev:/dev -v /sys/:/sys/ -v $ROOTFS:/target/root ubuntu:${param_ubuntuversion} sh -c \
+                'mount --bind dev /target/root/dev && \
+                mount -t proc proc /target/root/proc && \
+                mount -t sysfs sysfs /target/root/sys && \
+                LANG=C.UTF-8 chroot /target/root sh -c \
+                    \"$(echo ${INLINE_PROXY} | sed "s#'#\\\\\"#g") export TERM=xterm-color && \
+                    export DEBIAN_FRONTEND=noninteractive && \
+                    nmcli radio wifi on && \
+                    nmcli dev wifi connect ${param_wifissid} password '${param_wifipsk}' || true \"'" \
+                ${PROVISION_LOG}
+        else
+            run "Installing Wifi on Ubuntu ${param_ubuntuversion}" \
+                "wget --header \"Authorization: token ${param_token}\" -O $ROOTFS/etc/systemd/network/wireless.network ${param_raw_repository}/files/etc/systemd/network/wireless.network.template && \
+                sed -i -e \"s#@@WIFI_NAME@@#${WIFI_NAME}#g\" $ROOTFS/etc/systemd/network/wireless.network && \
+                sed -i -e \"s#@@WPA_SSID@@#${param_wifissid}#g\" $ROOTFS/etc/systemd/network/wireless.network && \
+                sed -i -e \"s#@@WPA_PSK@@#${param_wifipsk}#g\" $ROOTFS/etc/systemd/network/wireless.network" \
+                ${PROVISION_LOG}
+        fi
+
+        run "Installing Wireless Packages on Ubuntu ${param_ubuntuversion}" \
+            "docker run -i --rm --privileged --name ubuntu-installer ${DOCKER_PROXY_ENV} -v /dev:/dev -v /sys/:/sys/ -v $ROOTFS:/target/root ubuntu:${param_ubuntuversion} sh -c \
+            'mount --bind dev /target/root/dev && \
+            mount -t proc proc /target/root/proc && \
+            mount -t sysfs sysfs /target/root/sys && \
+            LANG=C.UTF-8 chroot /target/root sh -c \
+                \"$(echo ${INLINE_PROXY} | sed "s#'#\\\\\"#g") export TERM=xterm-color && \
+                export DEBIAN_FRONTEND=noninteractive && \
+                ${MOUNT_DURING_INSTALL} && \
+                apt install -y wireless-tools wpasupplicant && \
+                mkdir -p /etc/wpa_supplicant && \
+                wpa_passphrase ${param_wifissid} '${param_wifipsk}' > /etc/wpa_supplicant/wpa_supplicant-${WIFI_NAME}.conf && \
+                systemctl enable wpa_supplicant@${WIFI_NAME}.service\"'" \
+            ${PROVISION_LOG}
+    fi
+fi
+
+
+
+
+run "Installing Docker on Ubuntu ${param_ubuntuversion}" \
+    "docker run -i --rm --privileged --name ubuntu-installer ${DOCKER_PROXY_ENV} -v $ROOTFS:/target/root ubuntu:${param_ubuntuversion} sh -c \
+    'mount --bind dev /target/root/dev && \
+    mount -t proc proc /target/root/proc && \
+    mount -t sysfs sysfs /target/root/sys && \
+    LANG=C.UTF-8 chroot /target/root sh -c \
+        \"$(echo ${INLINE_PROXY} | sed "s#'#\\\\\"#g") export TERM=xterm-color && \
+        export DEBIAN_FRONTEND=noninteractive && \
+        ${MOUNT_DURING_INSTALL} && \
+        apt-get update && \
+        DOCKER_PKG=$(apt-cache search docker-ce) && \
+        if [ \\\"${DOCKER_PKG}\\\" != \\\"\\\" ]; then \
+            echo \\\"package exists\\\"; \
+        else \
+            apt install -y \
+            apt-transport-https \
+            ca-certificates \
+            curl \
+            gnupg-agent \
+            software-properties-common && \
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - && \
+            apt-key fingerprint 0EBFCD88 && \
+            sudo add-apt-repository \\\"deb [arch=arm64] https://download.docker.com/linux/ubuntu ${DOCKER_UBUNTU_RELEASE} stable\\\" && \
+            apt-get update;
+        fi && \
+        apt-get install -y docker-ce docker-ce-cli containerd.io\"'" \
+    "/dev/console"
+
+
+
+# --- Create system-docker database on $ROOTFS ---
+run "Preparing system-docker database" \
+    "mkdir -p $ROOTFS/var/lib/docker && \
+    docker run -d --privileged --name system-docker ${DOCKER_PROXY_ENV} -v $ROOTFS/var/lib/docker:/var/lib/docker docker:stable-dind ${REGISTRY_MIRROR}" \
+    "/dev/console"
+	
+
+
+
+#if [ $freemem -lt 6291456 ]; then
+#    run "Cleaning up" \
+#        "killall dockerd &&
+#        sleep 3 &&
+#        while (! rm -fr $ROOTFS/tmp/ > /dev/null ); do sleep 2; done" \
+#        "/dev/console"
+		
+#        swapoff $ROOTFS/swap &&
+#        rm $ROOTFS/swap &&
+#fi
+
+#umount $BOOTFS &&
+#umount $ROOTFS &&
+
+#if [[ $param_diskencrypt == 'true' ]]; then
+#    cryptsetup luksClose root 2>&1 | tee -a /dev/console
+#fi
+
+if [[ $param_release == 'prod' ]]; then
+    poweroff
+else
+    #reboot
+	poweroff
+fi

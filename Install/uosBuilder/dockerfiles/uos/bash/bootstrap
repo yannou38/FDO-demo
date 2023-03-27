@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Copyright (C) 2019 Intel Corporation
+# SPDX-License-Identifier: BSD-3-Clause
+
+set -a
+
+#this is provided while using Utility OS
+source /opt/bootstrap/functions
+
+#param_httpserver=$1
+
+# --- Get kernel parameters ---
+kernel_params=$(cat /proc/cmdline)
+echo "Running docker-based FDO Device Agent" 2>&1 | tee -a /mnt/root/logDevice.txt
+utilityos 
+
+echo "Loading docker Image" 2>&1 | tee -a /mnt/root/logDevice.txt
+cd /mnt/root
+sleep 30
+docker load -i fdodevice.tar.gz 2>&1 | tee -a /mnt/root/logDevice.txt
+echo "Running docker Image" 2>&1 | tee -a /mnt/root/logDevice.txt
+docker run --mount source=fdovolume,target=/persist fdodevice:alpine 2>&1 | tee -a /mnt/root/logDevice.txt
+
+echo "Image run !" 2>&1 | tee -a /mnt/root/logDevice.txt
+
+sshpass -p "PASSWORD" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /mnt/root/logDevice.txt USER@xx.xx.xx.xx:/tmp/logDevice-$(date -Iminutes).txt
+if [[ -f /mnt/root/tmp/docker/volumes/fdovolume/_data/installOS.sh ]]; then
+	source /mnt/root/tmp/docker/volumes/fdovolume/_data/installOS.sh
+elif [[ $kernel_params = *"shutdownAfterBoot="* ]]; then
+	sleep 5
+	poweroff
+fi

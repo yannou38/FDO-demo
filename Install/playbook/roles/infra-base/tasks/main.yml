@@ -1,0 +1,46 @@
+---
+- name: Ensure that necessary packages are installed
+  apt:
+    pkg: "{{ host_package_list }}"
+    update_cache: yes
+  become: yes
+
+- name: Install libvirt-python package
+  pip:
+    name:
+      - libvirt-python
+    extra_args: "--system"
+  become: yes
+
+- name: Add the remote user to the Libvirt and kvm groups
+  user:
+    name: "{{ ansible_user }}"
+    groups: [libvirt, kvm]
+    append: yes
+  become: yes
+
+- name: Create a directory for the VM images
+  file:
+    path: "/home/{{ ansible_user }}/vm-images"
+    state: directory
+
+- name: Create a directory for cloud-init
+  file:
+    path: "/home/{{ ansible_user }}/cloud-init"
+    state: directory
+
+- name: Check if the Ubuntu Server image is present
+  find:
+    paths: ["/home/{{ ansible_user }}/vm-images/"]
+    patterns: "base-image.img"
+  register: vm_present
+  ignore_errors: yes
+
+- name: Download a Ubuntu Server image
+  get_url:
+    url: "{{ os_image_url }}"
+    dest: "/home/{{ ansible_user }}/vm-images/base-image.img"
+  when: "vm_present.matched == 0"
+
+
+

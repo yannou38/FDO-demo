@@ -1,0 +1,7 @@
+---
+vm_name: '' # Name of the VM. It will be used for the VM image filename, in configuration files and for the QEMU VM name.
+vm_disk_size: 5G # Disk size. It will be used during instantiation.
+vm_memory: 512 # Memory allocated in MB. It will be used during instantiation.
+vm_cpus: 1 # Number of CPUs. It will be used during instantiation.
+network_name: client # Number of CPUs. It will be used during instantiation.
+mac_addr: 52:54:00:00:00:00 # Number of CPUs. It will be used during instantiation.

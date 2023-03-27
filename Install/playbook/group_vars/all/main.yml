@@ -1,0 +1,7 @@
+---
+arch_ansible_to_os_img:
+  aarch64: "arm64"
+  x86_64: "amd64"
+eth_interface_mapping:
+  arm64: "enp1s0"
+  amd64: "ens2"

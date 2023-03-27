@@ -1,0 +1,1 @@
+host_package_list: [qemu-kvm, virtinst, libvirt-daemon-system, libvirt-dev, bridge-utils, cloud-image-utils, python3-pip, fping, net-tools] 

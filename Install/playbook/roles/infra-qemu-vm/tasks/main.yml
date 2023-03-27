@@ -1,0 +1,65 @@
+---
+- name: Check role variables ({{ vm_name }})
+  include_tasks: check_vars.yml
+
+- name: List installed VMs ({{ vm_name }})
+  command: virsh list --all
+  register: vm_installed
+  environment:
+    LIBVIRT_DEFAULT_URI: qemu:///system
+  ignore_errors: yes
+  become: yes
+  
+- name: Check if the VM image is present ({{ vm_name }})
+  find:
+    paths: ["/var/lib/libvirt/images/"]
+    patterns: "{{ vm_name }}.img"
+  register: vm_present
+  ignore_errors: yes
+  become: yes
+  
+- name: Resize the image ({{ vm_name }})
+  command: >
+    qemu-img create -b /home/{{ ansible_user }}/vm-images/base-image.img -f qcow2
+    /var/lib/libvirt/images/{{ vm_name }}.img {{ vm_disk_size }}
+  become: yes
+  when: "vm_present.matched == 0"
+
+- name: Rebase the image to add backing image format ({{ vm_name }})
+  command: >
+    qemu-img rebase -f qcow2 -F qcow2 -b /home/{{ ansible_user }}/vm-images/base-image.img /var/lib/libvirt/images/{{ vm_name }}.img
+  become: yes
+  when: "vm_present.matched == 0"
+
+- name: Transfer cloud-init configuration file ({{ vm_name }})
+  template:
+    src: cloud_init.cfg.j2
+    dest: "/home/{{ ansible_user }}/cloud-init/cloud_init_{{ vm_name }}.cfg"
+
+- name: Transfer templated network config file ({{ vm_name }})
+  template:
+    src: "network_config.cfg.j2"
+    dest: "/home/{{ ansible_user }}/cloud-init/network_{{ vm_name }}.cfg"
+
+- name: Create cloud-init configuration image ({{ vm_name }})
+  command: cloud-localds -N network_{{ vm_name }}.cfg {{ vm_name }}-seed.img cloud_init_{{ vm_name }}.cfg
+  args:  
+    chdir: "/home/{{ ansible_user }}/cloud-init/"
+  become: yes
+
+- name: Install the VM if not installed ({{ vm_name }})
+  command: >
+      virt-install --name {{ vm_name }} --import --virt-type kvm --memory {{ vm_memory }} --vcpus {{ vm_cpus }} 
+      --disk path=/home/{{ ansible_user }}/cloud-init/{{ vm_name }}-seed.img,device=cdrom,format=raw 
+      --disk path=/var/lib/libvirt/images/{{ vm_name }}.img,device=disk 
+      --nographics --network network={{ network_name }},mac={{ mac_addr }} --console pty,target_type=serial --noautoconsole
+  when: vm_installed.stdout.find(vm_name) == -1
+  become: yes
+
+- name: Start the VM if already installed ({{ vm_name }})
+  virt: 
+    name: "{{ vm_name }}"
+    state: running
+  become: yes
+  when: vm_installed.stdout.find(vm_name) != -1
+

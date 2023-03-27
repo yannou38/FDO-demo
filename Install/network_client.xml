@@ -1,0 +1,12 @@
+<network>
+  <name>client</name>
+  <bridge name='virbr17'/>
+  <forward/>
+  <ip address='192.168.128.1' netmask='255.255.255.0'>
+    <dhcp>
+      <range start='192.168.128.2' end='192.168.128.254'/>
+      <host mac='52:54:00:00:00:04' name='demo_client_owner_vm' ip='192.168.128.2'/>
+      <host mac='52:54:00:00:00:05' name='demo_rendezvous_vm' ip='192.168.128.3'/>
+    </dhcp>
+  </ip>
+</network>

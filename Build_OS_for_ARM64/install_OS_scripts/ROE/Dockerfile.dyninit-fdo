@@ -1,0 +1,56 @@
+# Copyright (C) 2019 Intel Corporation
+# SPDX-License-Identifier: BSD-3-Clause
+
+FROM docker:20.10.2-dind
+LABEL maintainer "Bryan J Rodriguez <bryan.j.rodriguez@intel.com>"
+
+RUN apk update && apk add --no-cache \
+    bash \
+    coreutils \
+    cpio \
+    cryptsetup \
+    e2fsprogs \
+    e2fsprogs-extra \
+    efibootmgr \
+    eudev \
+    expect \
+    file \
+    git \
+    gnupg \
+    grub \
+    grub-efi \
+    lddtree \
+    lshw \
+    lvm2 \
+    netcat-openbsd \
+    openssh-client \
+    openssl \
+    parted \
+    pciutils \
+    py3-pip \
+    rng-tools \
+    rsync \
+    supervisor \
+    util-linux \
+    wget \
+    xz  && \
+    git clone https://github.com/secure-device-onboard/client-sdk-fidoiot.git && \
+    git clone https://github.com/intel/safestringlib.git && \
+    git clone https://github.com/intel/tinycbor.git && \
+   apk add --no-cache curl-dev libressl-dev make cmake haveged gcc g++ && \
+   cd tinycbor &&  make &&  cd ../safestringlib/ &&  cmake . && make && cd ../client-sdk-fidoiot/ && export SAFESTRING_ROOT=/safestringlib && \
+   export TINYCBOR_ROOT=/tinycbor && cmake . && make && ./utils/keys_gen.sh && \
+   mkdir ../fdo-client && cp ./build/linux-client ../fdo-client/ && cp -r  ./data  ../fdo-client/ && \
+   cd .. && rm -rf  safestringlib client-sdk-fidoiot tinycbor && /var/cache/apk/*
+
+
+RUN echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
+
+RUN mkdir -p /opt/bootstrap
+COPY bash/init /opt/bootstrap/
+COPY bash/functions /opt/bootstrap/
+COPY bash/start /opt/bootstrap/
+COPY bash/bootstrap /opt/bootstrap/
+ENTRYPOINT []
+CMD ["/bin/bash","/opt/bootstrap/start"]
+
