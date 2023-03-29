@@ -1,4 +1,5 @@
 A repository backing up a FDO Demo i made in june/july 2022 at my work
+Further documentation can be found in the [Wiki](https://github.com/yannou38/FDO-demo/wiki)
 
 ## What is FDO ?
 FDO (FIDO Device Onboarding) is an onboarding protocol for IoT device that aim to do a late-binding of ressources.
